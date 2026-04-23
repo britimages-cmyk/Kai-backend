@@ -13,116 +13,93 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
 <!-- Firebase SDK -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  try {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+    const { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyAo7SY5_0apHBeb1Aks6xnMtQ5ClWtjP4I",
-    authDomain: "kai-s-pensive.firebaseapp.com",
-    projectId: "kai-s-pensive",
-    storageBucket: "kai-s-pensive.firebasestorage.app",
-    messagingSenderId: "298778158437",
-    appId: "1:298778158437:web:37e27e103b62962e5c6d8c"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyAo7SY5_0apHBeb1Aks6xnMtQ5ClWtjP4I",
+      authDomain: "kai-s-pensive.firebaseapp.com",
+      projectId: "kai-s-pensive",
+      storageBucket: "kai-s-pensive.firebasestorage.app",
+      messagingSenderId: "298778158437",
+      appId: "1:298778158437:web:37e27e103b62962e5c6d8c"
+    };
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-  // Make db available globally
-  window._db = db;
-  window._fbReady = true;
+    window._db = db;
 
-  // ── SYNC HELPERS ──
-  window.fbSet = async (collName, id, data) => {
-    try {
-      await setDoc(doc(db, collName, String(id)), data);
-    } catch(e) { console.warn('fbSet error', e); }
-  };
+    window.fbSet = async (collName, id, data) => {
+      try { await setDoc(doc(db, collName, String(id)), data); } catch(e) {}
+    };
+    window.fbDelete = async (collName, id) => {
+      try { await deleteDoc(doc(db, collName, String(id))); } catch(e) {}
+    };
 
-  window.fbDelete = async (collName, id) => {
-    try {
-      await deleteDoc(doc(db, collName, String(id)));
-    } catch(e) { console.warn('fbDelete error', e); }
-  };
+    window._loadFromFirestore = async () => {
+      setSyncStatus('loading');
+      try {
+        const [taskSnap, mealSnap, noteSnap, goalSnap, boardSnap, fuSnap] = await Promise.all([
+          getDocs(collection(db, 'tasks')),
+          getDocs(collection(db, 'meals')),
+          getDocs(collection(db, 'notes')),
+          getDocs(collection(db, 'goals')),
+          getDocs(collection(db, 'boards')),
+          getDocs(collection(db, 'followups')),
+        ]);
+        if(taskSnap.docs.length)  window._tasks    = taskSnap.docs.map(d => d.data());
+        if(mealSnap.docs.length)  window._meals    = mealSnap.docs.map(d => d.data());
+        if(noteSnap.docs.length)  window._notes    = noteSnap.docs.map(d => d.data());
+        if(goalSnap.docs.length)  window._goals    = goalSnap.docs.map(d => d.data());
+        if(boardSnap.docs.length) window._boards   = boardSnap.docs.map(d => d.data());
+        if(fuSnap.docs.length)    window._followups= fuSnap.docs.map(d => d.data());
+        setSyncStatus('synced');
+      } catch(e) { setSyncStatus('offline'); }
+    };
 
-  // ── REAL-TIME LISTENERS ──
-  // Each listener updates the local array and re-renders
-
-  // Tasks
-  onSnapshot(collection(db, 'tasks'), snap => {
-    if(!window._initDone) return;
-    tasks = snap.docs.map(d => d.data());
-    renderTasks(); renderCalendar();
-    setSyncStatus('synced');
-  });
-
-  // Meals
-  onSnapshot(collection(db, 'meals'), snap => {
-    if(!window._initDone) return;
-    mealLog = snap.docs.map(d => d.data());
-    renderFoodStrip(); if(document.getElementById('foodOverlay')?.classList.contains('open')) renderFood();
-    setSyncStatus('synced');
-  });
-
-  // Notes
-  onSnapshot(collection(db, 'notes'), snap => {
-    if(!window._initDone) return;
-    notes = snap.docs.map(d => d.data());
-    if(document.getElementById('notesOverlay')?.classList.contains('open')) renderNotesList();
-    setSyncStatus('synced');
-  });
-
-  // Goals
-  onSnapshot(collection(db, 'goals'), snap => {
-    if(!window._initDone) return;
-    if(snap.docs.length > 0) goals = snap.docs.map(d => d.data());
-    renderGoals(); renderFoodStrip();
-    setSyncStatus('synced');
-  });
-
-  // Boards
-  onSnapshot(collection(db, 'boards'), snap => {
-    if(!window._initDone) return;
-    if(snap.docs.length > 0) boards = snap.docs.map(d => d.data());
-    renderBoardTabs(); renderTasks();
-    setSyncStatus('synced');
-  });
-
-  // Follow-ups
-  onSnapshot(collection(db, 'followups'), snap => {
-    if(!window._initDone) return;
-    followups = snap.docs.map(d => d.data());
-    renderFollowups();
-    setSyncStatus('synced');
-  });
-
-  // ── INITIAL LOAD from Firestore ──
-  // Pull existing data before first render
-  window._loadFromFirestore = async () => {
-    setSyncStatus('loading');
-    try {
-      const [taskSnap, mealSnap, noteSnap, goalSnap, boardSnap, fuSnap] = await Promise.all([
-        getDocs(collection(db, 'tasks')),
-        getDocs(collection(db, 'meals')),
-        getDocs(collection(db, 'notes')),
-        getDocs(collection(db, 'goals')),
-        getDocs(collection(db, 'boards')),
-        getDocs(collection(db, 'followups')),
-      ]);
-
-      if(taskSnap.docs.length)  tasks    = taskSnap.docs.map(d => d.data());
-      if(mealSnap.docs.length)  mealLog  = mealSnap.docs.map(d => d.data());
-      if(noteSnap.docs.length)  notes    = noteSnap.docs.map(d => d.data());
-      if(goalSnap.docs.length)  goals    = goalSnap.docs.map(d => d.data());
-      if(boardSnap.docs.length) boards   = boardSnap.docs.map(d => d.data());
-      if(fuSnap.docs.length)    followups= fuSnap.docs.map(d => d.data());
-
+    // Real-time listeners
+    onSnapshot(collection(db, 'tasks'), snap => {
+      if(!window._initDone) return;
+      tasks = snap.docs.map(d => d.data());
+      renderTasks(); renderCalendar(); setSyncStatus('synced');
+    });
+    onSnapshot(collection(db, 'meals'), snap => {
+      if(!window._initDone) return;
+      mealLog = snap.docs.map(d => d.data());
+      renderFoodStrip();
+      if(document.getElementById('foodOverlay')?.classList.contains('open')) renderFood();
       setSyncStatus('synced');
-    } catch(e) {
-      console.warn('Firestore load error:', e);
-      setSyncStatus('offline');
-    }
-  };
+    });
+    onSnapshot(collection(db, 'notes'), snap => {
+      if(!window._initDone) return;
+      notes = snap.docs.map(d => d.data());
+      if(document.getElementById('notesOverlay')?.classList.contains('open')) renderNotesList();
+      setSyncStatus('synced');
+    });
+    onSnapshot(collection(db, 'goals'), snap => {
+      if(!window._initDone) return;
+      if(snap.docs.length > 0) goals = snap.docs.map(d => d.data());
+      renderGoals(); setSyncStatus('synced');
+    });
+    onSnapshot(collection(db, 'boards'), snap => {
+      if(!window._initDone) return;
+      if(snap.docs.length > 0) boards = snap.docs.map(d => d.data());
+      renderBoardTabs(); renderTasks(); setSyncStatus('synced');
+    });
+    onSnapshot(collection(db, 'followups'), snap => {
+      if(!window._initDone) return;
+      followups = snap.docs.map(d => d.data());
+      renderFollowups(); setSyncStatus('synced');
+    });
+
+    window._fbReady = true;
+  } catch(e) {
+    // Firebase unavailable (preview, offline, etc) — run without sync
+    console.log('Firebase unavailable, running offline');
+    window._fbReady = false;
+  }
 </script>
 <style>
 :root {
@@ -627,6 +604,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .notes-empty-icon{font-size:40px;opacity:0.4;}
 .notes-empty-label{font-size:13px;color:var(--text3);}
 
+.topbar-nav-btn{font-family:var(--font);font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.15s;white-space:nowrap;}
+.topbar-nav-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(123,143,255,0.06);}
 /* SYNC STATUS */
 .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--border2);transition:background 0.4s;flex-shrink:0;}
 .sync-dot.synced{background:#4ade80;box-shadow:0 0 6px rgba(74,222,128,0.5);}
@@ -680,11 +659,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
       <span class="sync-label" id="syncLabel">—</span>
     </div>
     <span class="date-chip" id="live-date"></span>
-    <button class="notes-back" onclick="openNotes()" style="border-color:rgba(123,143,255,0.25);color:var(--accent);font-size:12px;gap:5px;">📝 Notes</button>
-    <button class="icon-btn" title="Time insights" onclick="openInsights()">⏱</button>
-    <button class="icon-btn" title="Goals" onclick="openGoals()">◎</button>
-    <button class="icon-btn" title="Email accounts" onclick="openEmailSettings()">✉</button>
-    <button class="icon-btn" title="Settings" onclick="openSettings()">⚙</button>
+    <nav style="display:flex;align-items:center;gap:2px;">
+      <button class="topbar-nav-btn" onclick="openNotes()">📝 Notes</button>
+      <button class="topbar-nav-btn" onclick="openDriveMeetingNotes()">📁 Meetings</button>
+      <button class="topbar-nav-btn" onclick="openInsights()">⏱ Time</button>
+      <button class="topbar-nav-btn" onclick="openGoals()">◎ Goals</button>
+      <button class="topbar-nav-btn" onclick="openFoodSheet()">🍽 Food</button>
+      <button class="topbar-nav-btn" onclick="openEmailSettings()">✉ Email</button>
+      <button class="topbar-nav-btn" onclick="openBriefing()">✦ Briefing</button>
+      <button class="topbar-nav-btn" onclick="openSettings()" style="border-color:rgba(123,143,255,0.2);color:var(--accent);">⚙ Settings</button>
+    </nav>
   </div>
 </header>
 
@@ -880,6 +864,40 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 </footer>
 </div>
 
+<!-- SETUP WIZARD -->
+<div id="setupWizard" style="position:fixed;inset:0;z-index:600;background:var(--bg);display:none;flex-direction:column;animation:fadeIn 0.4s ease;">
+  <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:800px;height:300px;background:radial-gradient(ellipse at top,rgba(123,143,255,0.09) 0%,transparent 70%);pointer-events:none;"></div>
+
+  <!-- Header -->
+  <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:20px 32px 0;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="kai-logo-dot" style="width:10px;height:10px;"></div>
+      <span style="font-family:var(--font-serif);font-size:20px;color:var(--text);">Kai</span>
+    </div>
+    <button onclick="skipSetup()" style="font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;font-family:var(--font);padding:4px 8px;border-radius:4px;transition:color 0.15s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">Skip setup →</button>
+  </div>
+
+  <!-- Progress bar -->
+  <div style="flex-shrink:0;padding:16px 32px 0;">
+    <div style="height:3px;background:var(--bg4);border-radius:2px;overflow:hidden;">
+      <div id="setupProgress" style="height:100%;background:var(--accent);border-radius:2px;transition:width 0.4s ease;width:0%;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;" id="setupStepLabels"></div>
+  </div>
+
+  <!-- Content -->
+  <div style="flex:1;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;padding:24px 32px 20px;scrollbar-width:thin;scrollbar-color:var(--bg4) transparent;">
+    <div style="width:100%;max-width:680px;" id="setupContent"></div>
+  </div>
+
+  <!-- Bottom nav -->
+  <div style="flex-shrink:0;padding:16px 32px 28px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);">
+    <button id="setupBackBtn" onclick="setupNav(-1)" style="padding:10px 20px;border-radius:var(--r-sm);border:1px solid var(--border);background:transparent;color:var(--text2);font-family:var(--font);font-size:13px;cursor:pointer;display:none;">← Back</button>
+    <div style="flex:1;font-size:12px;color:var(--text3);" id="setupStepCounter"></div>
+    <button id="setupNextBtn" onclick="setupNav(1)" style="padding:10px 28px;border-radius:var(--r-sm);border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:14px;font-weight:500;cursor:pointer;box-shadow:0 0 20px rgba(123,143,255,0.2);">Next →</button>
+  </div>
+</div>
+
 <!-- DAILY BRIEFING OVERLAY -->
 <div id="dailyBriefing" style="position:fixed;inset:0;z-index:500;background:var(--bg);display:none;flex-direction:column;animation:fadeIn 0.4s ease;">
 
@@ -908,6 +926,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 <div id="fabMenu" style="position:fixed;bottom:80px;right:18px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;z-index:50;">
   <!-- Sub-buttons (hidden by default) -->
   <div id="fabSubBtns" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;opacity:0;pointer-events:none;transform:translateY(8px);transition:all 0.2s;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="background:var(--bg4);color:var(--text2);font-size:11px;padding:4px 10px;border-radius:6px;white-space:nowrap;border:1px solid var(--border);">Setup guide</span>
+      <button onclick="openSetupWizard();toggleFab()" style="width:38px;height:38px;border-radius:50%;background:var(--bg2);border:1px solid var(--border2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">🚀</button>
+    </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span style="background:var(--bg4);color:var(--text2);font-size:11px;padding:4px 10px;border-radius:6px;white-space:nowrap;border:1px solid var(--border);">Help & How-tos</span>
       <button onclick="openDocs();toggleFab()" style="width:38px;height:38px;border-radius:50%;background:var(--bg2);border:1px solid var(--border2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">📖</button>
@@ -3313,6 +3335,285 @@ function toggleMic(){
 // SETTINGS / EMAIL ACCOUNTS
 // ──────────────────────────────────────────────
 // ──────────────────────────────────────────────
+// GOOGLE DRIVE — MEETING NOTES
+// ──────────────────────────────────────────────
+
+// Folder structure: "~Kai Meeting Notes" → subfolders matching board names
+// e.g. "~Kai Meeting Notes/Work", "~Kai Meeting Notes/Photography"
+
+let _driveRootId = null;        // ID of "~Kai Meeting Notes" folder
+let _driveFolders = [];         // [{id, name, board}] — subfolders mapped to boards
+let _scannedFiles = [];         // recently scanned files cache
+let _driveScanning = false;
+
+async function getDriveToken(){
+  // Use first connected Gmail account token (Drive uses same OAuth)
+  const account = gmailAccounts.find(a => a.connected);
+  if(!account) return null;
+  return await getValidToken(account);
+}
+
+async function driveAPI(params){
+  const token = await getDriveToken();
+  if(!token) throw new Error('No connected Google account');
+  const url = VERCEL_URL + '/api/drive?' + new URLSearchParams(params).toString();
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  const data = await res.json();
+  if(data.error) throw new Error(data.error);
+  return data;
+}
+
+async function findDriveRoot(){
+  const data = await driveAPI({ action: 'find_root' });
+  if(data.folders && data.folders.length > 0){
+    _driveRootId = data.folders[0].id;
+    return _driveRootId;
+  }
+  return null;
+}
+
+async function loadDriveFolders(){
+  if(!_driveRootId) await findDriveRoot();
+  if(!_driveRootId) return [];
+  const data = await driveAPI({ action: 'list_folders', folderId: _driveRootId });
+  _driveFolders = (data.folders || []).map(f => ({
+    ...f,
+    board: matchFolderToBoard(f.name)
+  }));
+  return _driveFolders;
+}
+
+function matchFolderToBoard(folderName){
+  const lower = folderName.toLowerCase();
+  const match = boards.find(b =>
+    lower.includes(b.label.toLowerCase()) ||
+    b.label.toLowerCase().includes(lower)
+  );
+  return match?.id || 'work';
+}
+
+async function scanMeetingNotes(){
+  if(_driveScanning) return;
+  _driveScanning = true;
+
+  try {
+    await loadDriveFolders();
+    if(!_driveFolders.length) return;
+
+    const allFiles = [];
+    for(const folder of _driveFolders){
+      const data = await driveAPI({ action: 'list_files', folderId: folder.id });
+      const files = (data.files || []).map(f => ({...f, board: folder.board, folderName: folder.name}));
+      allFiles.push(...files);
+    }
+
+    _scannedFiles = allFiles;
+    return allFiles;
+  } catch(e){
+    console.warn('Drive scan error:', e);
+    return [];
+  } finally {
+    _driveScanning = false;
+  }
+}
+
+async function readAndExtractTasks(fileId, fileName, board){
+  try {
+    const token = await getDriveToken();
+    const url = VERCEL_URL + '/api/drive?action=read_file&fileId=' + fileId;
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+
+    const boardLabel = boards.find(b=>b.id===board)?.label || board;
+
+    // Send to Kai AI to extract action items
+    const prompt = `You are reviewing meeting notes from a file called "${fileName}" (${boardLabel} board).
+
+Extract ALL action items, tasks, follow-ups, and next steps from these notes. For each item:
+- Write a clear, specific, actionable task name (not vague)
+- Identify who it's for if mentioned
+- Note any deadlines mentioned
+- Suggest priority (urgent or normal)
+
+Format your response as a JSON array only, no other text:
+[
+  {
+    "label": "Specific task name",
+    "why": "Brief context from the meeting",
+    "priority": "normal or high",
+    "due": "YYYY-MM-DD or null"
+  }
+]
+
+Meeting notes:
+${data.content}`;
+
+    // Call Anthropic API
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const aiData = await aiRes.json();
+    const text = aiData.content?.map(c=>c.text||'').join('') || '[]';
+
+    // Parse JSON response
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if(!jsonMatch) return [];
+
+    const extracted = JSON.parse(jsonMatch[0]);
+    return extracted.map((item, i) => ({
+      id: 'drive_' + fileId + '_' + i,
+      icon: '📋',
+      label: item.label,
+      why: item.why + ` — from meeting notes: "${fileName}"`,
+      board: board,
+      priority: item.priority === 'high' ? 'high' : 'normal',
+      due: item.due || null,
+      dismissed: false,
+      added: false,
+      source: 'drive',
+      sourceFile: fileName
+    }));
+
+  } catch(e){
+    console.warn('Extract error:', e);
+    return [];
+  }
+}
+
+function openDriveMeetingNotes(){
+  document.getElementById('modalTitle').textContent = 'Meeting notes';
+  document.getElementById('aiModal').classList.add('open');
+
+  const hasAccount = gmailAccounts.some(a=>a.connected);
+
+  if(!hasAccount){
+    document.getElementById('modalContent').innerHTML = `
+      <div style="text-align:center;padding:20px 0;">
+        <div style="font-size:40px;margin-bottom:12px;">📁</div>
+        <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:8px;">Connect Google first</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;">Connect a Gmail account to enable Google Drive access for meeting notes.</div>
+        <button class="submit-btn" onclick="closeModal();openEmailSettings()">Connect Gmail →</button>
+      </div>`;
+    document.getElementById('modalActions').innerHTML = `<button class="modal-pill" onclick="closeModal()">Close</button>`;
+    return;
+  }
+
+  document.getElementById('modalContent').innerHTML = `
+    <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;">
+      Kai reads meeting notes from your Google Drive folder <strong style="color:var(--text)">📁 ~Kai Meeting Notes</strong> and extracts action items into Kai Suggests.
+    </div>
+    <div style="padding:12px 14px;border-radius:var(--r-sm);border:1px solid rgba(123,143,255,0.2);background:rgba(123,143,255,0.05);margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:6px;">📁 Folder structure</div>
+      <div style="font-size:12px;color:var(--text2);font-family:monospace;line-height:1.8;">
+        ~Kai Meeting Notes/<br>
+        &nbsp;&nbsp;├── Work/<br>
+        &nbsp;&nbsp;├── Photography/<br>
+        &nbsp;&nbsp;└── Personal/
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;">Create this folder structure in your Google Drive, then drop meeting notes (.gdoc, .txt, .md, .docx) into the matching board folder.</div>
+    </div>
+    <div id="driveScanResult"></div>`;
+
+  document.getElementById('modalActions').innerHTML = `
+    <button class="modal-pill" style="background:var(--accent);color:#fff;border-color:var(--accent);" onclick="runDriveScan()">🔍 Scan for meeting notes</button>
+    <button class="modal-pill" onclick="closeModal()">Close</button>`;
+}
+
+async function runDriveScan(){
+  const result = document.getElementById('driveScanResult');
+  if(!result) return;
+
+  result.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text2);font-size:13px;">🔍 Scanning Google Drive…</div>`;
+
+  try {
+    const files = await scanMeetingNotes();
+
+    if(!_driveRootId){
+      result.innerHTML = `
+        <div style="padding:14px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:var(--r-sm);">
+          <div style="font-size:13px;font-weight:500;color:var(--danger);margin-bottom:6px;">Folder not found</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;">Create a folder named exactly <strong>"~Kai Meeting Notes"</strong> in your Google Drive root, then add board subfolders inside it.</div>
+        </div>`;
+      return;
+    }
+
+    if(!files || !files.length){
+      result.innerHTML = `
+        <div style="padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px;color:var(--text2);">
+          No files found in your ~Kai Meeting Notes folders. Add some meeting notes and try again.
+        </div>`;
+      return;
+    }
+
+    result.innerHTML = `
+      <div style="font-size:11px;color:var(--text3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Found ${files.length} file${files.length!==1?'s':''}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;" id="driveFileList">
+        ${files.map(f=>{
+          const boardColor = boards.find(b=>b.id===f.board)?.color||'var(--accent)';
+          const boardLabel = boards.find(b=>b.id===f.board)?.label||f.board;
+          const icon = f.mimeType==='application/vnd.google-apps.document'?'📄':
+                       f.mimeType?.includes('word')?'📝':'📋';
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);">
+            <span style="font-size:16px;">${icon}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</div>
+              <div style="font-size:11px;color:var(--text3);">📁 ${f.folderName} · <span style="color:${boardColor};">${boardLabel}</span></div>
+            </div>
+            <button onclick="extractFromFile('${f.id}','${f.name.replace(/'/g,"\\'")}','${f.board}',this)" style="flex-shrink:0;padding:5px 12px;border-radius:var(--r-sm);border:1px solid rgba(123,143,255,0.3);background:transparent;color:var(--accent);font-family:var(--font);font-size:11px;cursor:pointer;">Extract tasks</button>
+          </div>`;
+        }).join('')}
+      </div>
+      <button onclick="extractAllFiles()" style="width:100%;margin-top:10px;padding:10px;border-radius:var(--r-sm);border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;">✨ Extract tasks from all files</button>`;
+
+  } catch(e){
+    result.innerHTML = `<div style="padding:14px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:var(--r-sm);font-size:13px;color:var(--danger);">Error: ${e.message}</div>`;
+  }
+}
+
+async function extractFromFile(fileId, fileName, board, btn){
+  if(btn){ btn.textContent = '⏳ Reading…'; btn.disabled = true; }
+  const tasks = await readAndExtractTasks(fileId, fileName, board);
+  if(btn){ btn.textContent = tasks.length ? `✓ ${tasks.length} found` : '0 found'; }
+  if(tasks.length){
+    // Add to suggestedTasks, avoiding duplicates
+    tasks.forEach(t=>{
+      if(!suggestedTasks.find(s=>s.id===t.id)) suggestedTasks.push(t);
+    });
+    renderSuggests();
+    // Update badge
+    const badge = document.getElementById('suggestsBadge');
+    if(badge) badge.textContent = suggestedTasks.filter(s=>!s.dismissed&&!s.added).length;
+    if(btn){ btn.style.background='var(--personal)'; btn.style.color='#0d0f14'; }
+  }
+}
+
+async function extractAllFiles(){
+  if(!_scannedFiles.length) return;
+  const btn = event.target;
+  btn.textContent = '⏳ Extracting from all files…';
+  btn.disabled = true;
+  let total = 0;
+  for(const f of _scannedFiles){
+    const tasks = await readAndExtractTasks(f.id, f.name, f.board);
+    tasks.forEach(t=>{ if(!suggestedTasks.find(s=>s.id===t.id)) suggestedTasks.push(t); });
+    total += tasks.length;
+  }
+  renderSuggests();
+  btn.textContent = `✓ ${total} tasks extracted → see Kai Suggests`;
+  btn.style.background = 'var(--personal)';
+  btn.style.color = '#0d0f14';
+  setTimeout(()=>{ closeModal(); setRightPanel('suggests'); }, 1500);
+}
+
+// ──────────────────────────────────────────────
 // GMAIL INTEGRATION
 // ──────────────────────────────────────────────
 const VERCEL_URL = 'https://kai-backend.vercel.app'; // UPDATE after deploy
@@ -3547,11 +3848,13 @@ function openSettings(){
   document.getElementById('aiModal').classList.add('open');
 
   const items = [
+    {icon:'🚀', title:'Setup guide',            desc:'Step-by-step walkthrough for Firebase, Gmail, and PWA install', action:'closeModal();openSetupWizard();'},
     {icon:'🗂',  title:'Boards',             desc:'Rename, recolor, change icons, add or remove boards',         action:'closeModal();openBoardManager();'},
     {icon:'✉️', title:'Email accounts',      desc:'Connect Gmail accounts and route them to boards',             action:'closeModal();openEmailSettings();'},
     {icon:'📅', title:'Calendar overview',   desc:'Full calendar briefing — this week, next week, conflicts',    action:`closeModal();openAI('Show me a full overview of my calendar — upcoming events this week and next, anything I should prepare for, and any scheduling conflicts or gaps I should know about.','Calendar overview');`},
     {icon:'✦',  title:'Kai Spotlight',       desc:'Full morning briefing — calendar, tasks, emails, goals',      action:'closeModal();openFullBriefing();'},
     {icon:'💡', title:'Kai Suggests',         desc:'AI-proposed tasks to review and add with one tap',            action:`closeModal();setRightPanel('suggests');`},
+    {icon:'📁', title:'Meeting notes',          desc:'Scan Google Drive folders and extract action items into Kai Suggests', action:'closeModal();openDriveMeetingNotes();'},
     {icon:'✅', title:'Task insights',        desc:'Completion rate, overdue items, board breakdown, trends',     action:'closeModal();openInsights();'},
     {icon:'◎',  title:'Goals check-in',      desc:'Progress on all 2025 goals with next steps',                  action:'closeModal();openGoals();'},
     {icon:'🍽', title:'Food planner',         desc:'Meal log, suggestions, home vs eating out stats',            action:'closeModal();openFoodSheet();'},
@@ -4234,6 +4537,362 @@ function exportNoteOneNote(id){
     document.getElementById('modalContent').innerHTML = `<div class="ai-response">Your note has been <strong>copied to clipboard</strong>.\n\n<strong>To paste into OneNote:</strong>\n1. Open OneNote and navigate to the page you want\n2. Click where you want to paste\n3. Press Ctrl+V (or ⌘+V on Mac)\n\nOneNote will preserve the formatting including headings and bullet points.</div>`;
     document.getElementById('modalActions').innerHTML = `<button class="modal-pill" onclick="closeModal()">Done</button>`;
   }).catch(()=>{ exportNoteTxt(id); });
+}
+
+// ──────────────────────────────────────────────
+// FIRST-RUN SETUP WIZARD
+// ──────────────────────────────────────────────
+const SETUP_KEY = 'kai_setup_complete';
+let _setupStep = 0;
+
+const SETUP_STEPS = [
+  {
+    id: 'welcome',
+    label: 'Welcome',
+    title: 'Welcome to Kai ✦',
+    subtitle: 'Your personal operating system. Let\'s get you set up in about 5 minutes.',
+    render: () => `
+      <div style="text-align:center;padding:10px 0 24px;">
+        <div style="font-size:56px;margin-bottom:16px;">✦</div>
+        <h1 style="font-family:var(--font-serif);font-size:32px;font-weight:400;color:var(--text);margin-bottom:10px;">Welcome to Kai</h1>
+        <p style="font-size:15px;color:var(--text2);line-height:1.7;max-width:480px;margin:0 auto 28px;">Your personal OS for managing your calendar, tasks, goals, food, and notes — all in one place.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:24px;">
+        ${[
+          {icon:'📅',label:'Calendar & Events',desc:'Your full week at a glance'},
+          {icon:'✅',label:'Tasks & Goals',desc:'Boards, priorities, progress'},
+          {icon:'✦',label:'AI-Powered',desc:'Kai helps you think and plan'},
+          {icon:'🍽',label:'Food Tracking',desc:'Meals, suggestions, stats'},
+          {icon:'📝',label:'Notes',desc:'Brainstorm and export anywhere'},
+          {icon:'🔄',label:'Live Sync',desc:'All your devices, always in sync'},
+        ].map(f=>`
+          <div style="padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);text-align:center;">
+            <div style="font-size:22px;margin-bottom:6px;">${f.icon}</div>
+            <div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px;">${f.label}</div>
+            <div style="font-size:11px;color:var(--text3);">${f.desc}</div>
+          </div>`).join('')}
+      </div>
+      <div style="padding:14px 18px;background:rgba(123,143,255,0.06);border:1px solid rgba(123,143,255,0.2);border-radius:var(--r-sm);font-size:13px;color:var(--text2);line-height:1.6;text-align:center;">
+        This wizard will walk you through setting up Firebase sync, connecting Gmail, installing Kai as a desktop app, and personalising your boards.
+      </div>`
+  },
+  {
+    id: 'boards',
+    label: 'Boards',
+    title: 'Set up your boards',
+    render: () => `
+      <h2 style="font-family:var(--font-serif);font-size:24px;font-weight:400;color:var(--text);margin-bottom:8px;">Your boards</h2>
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Boards organise everything in Kai — tasks, emails, notes, and goals all belong to a board. You can rename, recolor, and add boards anytime in Settings → Boards.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;" id="setupBoardsList"></div>
+      <div style="padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+        <div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:8px;">Add a custom board</div>
+        <div style="display:flex;gap:8px;">
+          <input class="form-input" id="setupNewBoard" type="text" placeholder="Board name…" style="flex:1;" onkeydown="if(event.key==='Enter')setupAddBoard()">
+          <button onclick="setupAddBoard()" style="padding:8px 16px;border-radius:var(--r-sm);border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:12px;cursor:pointer;">Add</button>
+        </div>
+      </div>
+      <script>
+        (function(){
+          const el = document.getElementById('setupBoardsList');
+          if(!el) return;
+          el.innerHTML = boards.map(b=>\`
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+              <div style="width:32px;height:32px;border-radius:8px;background:\${b.color}22;display:flex;align-items:center;justify-content:center;font-size:16px;">\${b.icon}</div>
+              <div style="flex:1;font-size:13px;font-weight:500;color:var(--text);">\${b.label}</div>
+              <div style="width:8px;height:8px;border-radius:50%;background:\${b.color};"></div>
+              <button onclick="closeSetupGoToBoards()" style="padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text2);font-family:var(--font);font-size:11px;cursor:pointer;">Edit</button>
+            </div>\`).join('');
+        })();
+      <\/script>`
+  },
+  {
+    id: 'firebase',
+    label: 'Sync',
+    title: 'Enable real-time sync',
+    render: () => {
+      const synced = window._fbReady === true;
+      return `
+      <h2 style="font-family:var(--font-serif);font-size:24px;font-weight:400;color:var(--text);margin-bottom:8px;">Real-time sync across devices</h2>
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Firebase keeps Kai in sync across your desktop, laptop, phone, and tablet. Any change on one device appears on all others instantly.</p>
+
+      <div style="padding:14px 18px;background:${synced?'rgba(110,231,183,0.06)':'rgba(251,191,36,0.05)'};border:1px solid ${synced?'rgba(110,231,183,0.3)':'rgba(251,191,36,0.2)'};border-radius:var(--r-sm);margin-bottom:20px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:24px;">${synced?'✅':'⚠️'}</span>
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px;">${synced?'Firebase connected and syncing':'Firebase not yet connected'}</div>
+          <div style="font-size:12px;color:var(--text2);">${synced?'Your data is syncing in real time across all devices.':'Follow the steps below to connect.'}</div>
+        </div>
+      </div>
+
+      ${synced ? '' : `
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${[
+          {n:1, title:'Create a Firebase project', desc:'Go to console.firebase.google.com → Add project → name it "Kai" → Create', link:'https://console.firebase.google.com', btn:'Open Firebase →'},
+          {n:2, title:'Enable Firestore Database', desc:'In Firebase → Firestore Database → Create database → Test mode → Enable', link:'https://console.firebase.google.com', btn:'Open Firebase →'},
+          {n:3, title:'Add your config to kai.html', desc:'In Firebase → Project Settings → Your apps → copy the firebaseConfig object and paste it into kai.html replacing the existing config', link:null, btn:null},
+          {n:4, title:'Reload Kai', desc:'Save kai.html and reload it in your browser — the sync dot will turn green', link:null, btn:null},
+        ].map(s=>`
+          <div style="display:flex;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;flex-shrink:0;">${s.n}</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;">${s.title}</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5;">${s.desc}</div>
+            </div>
+            ${s.link?`<a href="${s.link}" target="_blank" style="align-self:center;padding:5px 10px;border-radius:5px;border:1px solid rgba(123,143,255,0.3);background:rgba(123,143,255,0.06);color:var(--accent);font-size:11px;text-decoration:none;white-space:nowrap;">${s.btn}</a>`:''}
+          </div>`).join('')}
+      </div>`}`;
+    }
+  },
+  {
+    id: 'gmail',
+    label: 'Gmail',
+    title: 'Connect your Gmail',
+    render: () => {
+      const connected = gmailAccounts.filter(a=>a.connected);
+      return `
+      <h2 style="font-family:var(--font-serif);font-size:24px;font-weight:400;color:var(--text);margin-bottom:8px;">Connect Gmail accounts</h2>
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Connect your Gmail accounts so Kai can show priority emails in Spotlight, route them to the right board, and help you draft replies with AI.</p>
+
+      ${connected.length ? `
+        <div style="margin-bottom:16px;">
+          <div style="font-size:11px;color:var(--text3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Connected</div>
+          ${connected.map(a=>`
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(110,231,183,0.06);border:1px solid rgba(110,231,183,0.2);border-radius:var(--r-sm);margin-bottom:6px;">
+              <span style="font-size:18px;">✉️</span>
+              <div style="flex:1;font-size:13px;font-weight:500;color:var(--text);">${a.email}</div>
+              <span style="font-size:11px;color:var(--personal);">✓ Connected</span>
+            </div>`).join('')}
+        </div>` : ''}
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        ${[
+          {id:'work',    icon:'💼', label:'Work Gmail',         desc:'Your main work address'},
+          {id:'photo',   icon:'📷', label:'Photography Gmail',  desc:'Client inquiries & bookings'},
+          {id:'personal',icon:'🏠', label:'Personal Gmail',     desc:'Personal email'},
+        ].filter(s=>!gmailAccounts.find(a=>a.accountId===s.id&&a.connected)).map(s=>`
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+            <span style="font-size:20px;">${s.icon}</span>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text);">${s.label}</div>
+              <div style="font-size:11px;color:var(--text3);">${s.desc}</div>
+            </div>
+            <button onclick="connectGmail('${s.id}')" style="padding:7px 14px;border-radius:var(--r-sm);border:1px solid rgba(123,143,255,0.3);background:rgba(123,143,255,0.06);color:var(--accent);font-family:var(--font);font-size:12px;cursor:pointer;">Connect →</button>
+          </div>`).join('')}
+      </div>
+
+      <div style="padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;color:var(--text3);line-height:1.6;">
+        💡 Connecting Gmail requires the Kai backend to be deployed on Vercel. If you haven't done that yet, you can skip this step and connect later via Settings → Email.
+      </div>`;
+    }
+  },
+  {
+    id: 'pwa',
+    label: 'Install',
+    title: 'Install Kai as a desktop app',
+    render: () => `
+      <h2 style="font-family:var(--font-serif);font-size:24px;font-weight:400;color:var(--text);margin-bottom:8px;">Install on your devices</h2>
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Install Kai as a PWA so it opens like a real app — no browser chrome, launches from your taskbar or dock, and works offline.</p>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+
+        <div style="padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="font-size:20px;">🖥</span>
+            <div style="font-size:13px;font-weight:500;color:var(--text);">Windows / Mac desktop (Chrome or Edge)</div>
+          </div>
+          <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px;">
+            <li style="font-size:12px;color:var(--text2);">Make sure <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">kai.html</code>, <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">kai-manifest.json</code>, and <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">kai-sw.js</code> are all in the same folder</li>
+            <li style="font-size:12px;color:var(--text2);">Open <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">kai.html</code> in Chrome</li>
+            <li style="font-size:12px;color:var(--text2);">Look for the <strong style="color:var(--text)">⊕ install icon</strong> in Chrome's address bar → click Install</li>
+            <li style="font-size:12px;color:var(--text2);">Kai opens as a standalone app window</li>
+          </ol>
+        </div>
+
+        <div style="padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="font-size:20px;">🚀</span>
+            <div style="font-size:13px;font-weight:500;color:var(--text);">Launch on Windows startup</div>
+          </div>
+          <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px;">
+            <li style="font-size:12px;color:var(--text2);">Press <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">Win + R</code> → type <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">shell:startup</code> → Enter</li>
+            <li style="font-size:12px;color:var(--text2);">Right-click → New Shortcut</li>
+            <li style="font-size:12px;color:var(--text2);">Paste: <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;word-break:break-all;">chrome.exe --app=file:///C:/Users/Britt/Downloads/Kai/kai.html</code></li>
+            <li style="font-size:12px;color:var(--text2);">Name it "Kai" → Finish</li>
+          </ol>
+        </div>
+
+        <div style="padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="font-size:20px;">📱</span>
+            <div style="font-size:13px;font-weight:500;color:var(--text);">iPhone / Android</div>
+          </div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;">Open <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">kai.html</code> in Safari (iPhone) or Chrome (Android) → tap Share → <strong style="color:var(--text)">Add to Home Screen</strong> → Kai appears as an app icon.</div>
+        </div>
+
+      </div>`
+  },
+  {
+    id: 'personalise',
+    label: 'Personalise',
+    title: 'Personalise Kai',
+    render: () => `
+      <h2 style="font-family:var(--font-serif);font-size:24px;font-weight:400;color:var(--text);margin-bottom:8px;">Make Kai yours</h2>
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">A few quick things you can do right now to get the most out of Kai from day one.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        ${[
+          {icon:'✅', label:'Add your first task', desc:'Tap "+ Add" in the Tasks panel', action:"skipSetup();openAddTask()", btn:'Add task'},
+          {icon:'📅', label:'Check your calendar', desc:'Your events show in the hourly week view', action:"skipSetup()", btn:'View calendar'},
+          {icon:'◎', label:'Review your goals', desc:'See your 2025 goals and weekly progress', action:"skipSetup();openGoals()", btn:'Open goals'},
+          {icon:'📝', label:'Create a note', desc:'Brainstorm or plan in the Notes section', action:"skipSetup();openNotes()", btn:'Open notes'},
+          {icon:'🍽', label:'Log your first meal', desc:'Track what you eat and get suggestions', action:"skipSetup();openLogMeal()", btn:'Log meal'},
+          {icon:'💬', label:'Send feedback', desc:'Tell us what you think or what\'s missing', action:"skipSetup();openFeedback()", btn:'Give feedback'},
+        ].map(a=>`
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+            <span style="font-size:18px;">${a.icon}</span>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;color:var(--text);">${a.label}</div>
+              <div style="font-size:11px;color:var(--text3);">${a.desc}</div>
+            </div>
+            <button onclick="${a.action}" style="padding:6px 12px;border-radius:var(--r-sm);border:1px solid rgba(123,143,255,0.3);background:rgba(123,143,255,0.06);color:var(--accent);font-family:var(--font);font-size:11px;cursor:pointer;white-space:nowrap;">${a.btn}</button>
+          </div>`).join('')}
+      </div>`
+  },
+  {
+    id: 'drive',
+    label: 'Meetings',
+    title: 'Set up meeting notes',
+    render: () => `
+      <h2 style="font-family:var(--font-serif);font-size:24px;font-weight:400;color:var(--text);margin-bottom:8px;">Meeting notes → tasks</h2>
+      <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Kai reads your meeting notes from Google Drive and automatically extracts action items into Kai Suggests for you to review and add.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+        ${[
+          {n:1, title:'Create the root folder', desc:'In Google Drive, create a folder named exactly: <strong style="color:var(--text)">~Kai Meeting Notes</strong>'},
+          {n:2, title:'Create board subfolders', desc:'Inside it, create subfolders matching your board names: <strong style="color:var(--text)">Work</strong>, <strong style="color:var(--text)">Photography</strong>, <strong style="color:var(--text)">Personal</strong>'},
+          {n:3, title:'Drop in your notes', desc:'Add meeting notes as Google Docs, .txt, .md, or .docx files into the matching board folder'},
+          {n:4, title:'Scan from Kai', desc:'Click 📁 Meetings in the topbar → Scan for meeting notes → Extract tasks → they appear in Kai Suggests'},
+        ].map(s=>`
+          <div style="display:flex;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;flex-shrink:0;">${s.n}</div>
+            <div style="flex:1;font-size:13px;color:var(--text2);line-height:1.5;">${s.desc}</div>
+          </div>`).join('')}
+      </div>
+      <div style="padding:12px 16px;background:rgba(110,231,183,0.05);border:1px solid rgba(110,231,183,0.2);border-radius:var(--r-sm);font-size:12px;color:var(--text2);line-height:1.6;">
+        💡 The folder structure can match your exact board names — Kai automatically maps each subfolder to the right board. You can add more folders anytime and they'll be picked up on the next scan.
+      </div>
+      <div style="margin-top:12px;text-align:center;">
+        <a href="https://drive.google.com" target="_blank" style="display:inline-block;padding:10px 20px;border-radius:var(--r-sm);border:1px solid rgba(123,143,255,0.3);background:rgba(123,143,255,0.06);color:var(--accent);font-size:13px;text-decoration:none;">Open Google Drive →</a>
+      </div>`
+  },
+  {
+    id: 'done',
+    label: 'Done',
+    title: "You're all set!",
+    render: () => `
+      <div style="text-align:center;padding:20px 0;">
+        <div style="font-size:56px;margin-bottom:16px;">🚀</div>
+        <h1 style="font-family:var(--font-serif);font-size:28px;font-weight:400;color:var(--text);margin-bottom:10px;">You're all set!</h1>
+        <p style="font-size:14px;color:var(--text2);line-height:1.7;max-width:480px;margin:0 auto 28px;">Kai is ready to go. Your daily briefing will appear each morning after 3am. The ✦ button in the bottom right opens Help & Feedback anytime.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:400px;margin:0 auto;">
+          ${[
+            {icon:'✦', label:'Open today\'s briefing', action:'skipSetup();openBriefing()'},
+            {icon:'⚙', label:'Go to Settings', action:'skipSetup();openSettings()'},
+            {icon:'📖', label:'Read Help & How-tos', action:'skipSetup();openDocs()'},
+            {icon:'💬', label:'Send feedback', action:'skipSetup();openFeedback()'},
+          ].map(a=>`
+            <div onclick="${a.action}" style="padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;text-align:center;transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <div style="font-size:20px;margin-bottom:6px;">${a.icon}</div>
+              <div style="font-size:12px;font-weight:500;color:var(--text);">${a.label}</div>
+            </div>`).join('')}
+        </div>
+      </div>`
+  },
+];
+
+function shouldShowSetup(){
+  return !localStorage.getItem(SETUP_KEY);
+}
+
+function markSetupComplete(){
+  localStorage.setItem(SETUP_KEY, '1');
+}
+
+function openSetupWizard(){
+  _setupStep = 0;
+  document.getElementById('setupWizard').style.display = 'flex';
+  renderSetupStep();
+}
+
+function skipSetup(){
+  markSetupComplete();
+  document.getElementById('setupWizard').style.display = 'none';
+}
+
+function closeSetupGoToBoards(){
+  skipSetup();
+  openBoardManager();
+}
+
+function setupAddBoard(){
+  const input = document.getElementById('setupNewBoard');
+  if(!input||!input.value.trim()) return;
+  const id = input.value.trim().toLowerCase().replace(/[^a-z0-9]/g,'_')+'_'+Date.now();
+  boards.push({id, label:input.value.trim(), color:'var(--accent)', icon:'📋', desc:'', archived:false});
+  renderBoardTabs();
+  syncBoard(boards[boards.length-1]);
+  input.value='';
+  renderSetupStep(); // refresh board list
+}
+
+function renderSetupStep(){
+  const step = SETUP_STEPS[_setupStep];
+  const total = SETUP_STEPS.length;
+
+  // Progress bar
+  document.getElementById('setupProgress').style.width = (((_setupStep) / (total-1)) * 100) + '%';
+
+  // Step labels
+  document.getElementById('setupStepLabels').innerHTML = SETUP_STEPS.map((s,i)=>`
+    <span style="font-size:10px;color:${i===_setupStep?'var(--accent)':i<_setupStep?'var(--personal)':'var(--text3)'};transition:color 0.3s;cursor:pointer;" onclick="jumpSetupStep(${i})">${i<_setupStep?'✓ ':''}${s.label}</span>
+  `).join('');
+
+  // Counter
+  document.getElementById('setupStepCounter').textContent = `Step ${_setupStep+1} of ${total}`;
+
+  // Content with fade
+  const content = document.getElementById('setupContent');
+  content.style.opacity = '0';
+  content.style.transform = 'translateY(8px)';
+  setTimeout(()=>{
+    content.innerHTML = step.render();
+    // Run any inline scripts
+    content.querySelectorAll('script').forEach(s=>{
+      try { new Function(s.textContent)(); } catch(e){}
+    });
+    content.style.transition = 'all 0.25s ease';
+    content.style.opacity = '1';
+    content.style.transform = 'translateY(0)';
+  }, 80);
+
+  // Buttons
+  const backBtn = document.getElementById('setupBackBtn');
+  const nextBtn = document.getElementById('setupNextBtn');
+  backBtn.style.display = _setupStep > 0 ? 'block' : 'none';
+  const isLast = _setupStep === total - 1;
+  nextBtn.textContent = isLast ? 'Start using Kai ✦' : 'Next →';
+  nextBtn.style.background = isLast ? 'var(--personal)' : 'var(--accent)';
+}
+
+function setupNav(dir){
+  if(dir === 1 && _setupStep >= SETUP_STEPS.length - 1){
+    skipSetup();
+    return;
+  }
+  _setupStep = Math.max(0, Math.min(SETUP_STEPS.length - 1, _setupStep + dir));
+  renderSetupStep();
+}
+
+function jumpSetupStep(i){
+  _setupStep = i;
+  renderSetupStep();
 }
 
 // ──────────────────────────────────────────────
@@ -5124,23 +5783,23 @@ function syncAllGoals(){
   goals.forEach((g,i) => syncGoal(g,i));
 }
 
-// Register service worker for PWA
-if('serviceWorker' in navigator){
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./kai-sw.js')
-      .then(reg => console.log('Kai SW registered:', reg.scope))
-      .catch(err => console.warn('SW registration failed:', err));
-  });
-}
-
 // ── ASYNC INIT ──
 async function initKai(){
   updateDate();
   setGreeting();
 
-  // Try to load from Firestore first
-  if(window._loadFromFirestore){
+  // Load from Firestore if available
+  if(window._fbReady && window._loadFromFirestore){
     await window._loadFromFirestore();
+    // Apply loaded data
+    if(window._tasks)     tasks     = window._tasks;
+    if(window._meals)     mealLog   = window._meals;
+    if(window._notes)     notes     = window._notes;
+    if(window._goals)     goals     = window._goals;
+    if(window._boards)    boards    = window._boards;
+    if(window._followups) followups = window._followups;
+  } else {
+    setSyncStatus('offline');
   }
 
   window._initDone = true;
@@ -5156,8 +5815,11 @@ async function initKai(){
   renderFoodStrip();
   checkBriefingSchedule();
   checkGmailCallback();
-  // Refresh Gmail in background if accounts are connected
   if(gmailAccounts.length) setTimeout(refreshAllGmailAccounts, 2000);
+  // Show setup wizard on first ever launch
+  if(shouldShowSetup()){
+    setTimeout(openSetupWizard, 600);
+  }
   setTimeout(scrollToNow, 200);
 
   // Push local seed data to Firestore on first run (if Firestore was empty)
@@ -5186,12 +5848,13 @@ async function initKai(){
   }
 }
 
-// Wait for Firebase module to be ready before init
-function waitForFirebase(){
-  if(window._fbReady !== undefined){
+// Wait up to 3 seconds for Firebase, then start regardless
+function waitForFirebase(attempts){
+  attempts = attempts || 0;
+  if(window._fbReady !== undefined || attempts > 60){
     initKai();
   } else {
-    setTimeout(waitForFirebase, 50);
+    setTimeout(()=>waitForFirebase(attempts+1), 50);
   }
 }
 waitForFirebase();
